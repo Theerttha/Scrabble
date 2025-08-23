@@ -1,0 +1,598 @@
+/* room.css - Retro Scrabble Theme */
+
+/* Color Variables */
+:root {
+  --primary-orange: #f96635;
+  --primary-green: #59a822;
+  --accent-yellow: #faec86;
+  --accent-mint: #93d3ae;
+  --accent-teal: #2bbaa5;
+  --dark-bg: #1a1a1a;
+  --dark-card: #2d2d2d;
+  --neon-glow: #00ff88;
+  --danger-red: #ff3366;
+  --text-light: #ffffff;
+  --text-dark: #333333;
+}
+
+/* Base Styles */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Courier New', monospace;
+  background: var(--dark-bg);
+  color: var(--text-light);
+  overflow-x: hidden;
+}
+
+/* Container */
+.room-container {
+  position: relative;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+/* Animated Background */
+.retro-bg {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -1;
+  background: linear-gradient(45deg, var(--dark-bg), #2d2d3d);
+  animation: bgPulse 4s ease-in-out infinite alternate;
+}
+
+.retro-bg::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-image: 
+    linear-gradient(90deg, transparent 98%, var(--primary-orange) 100%),
+    linear-gradient(0deg, transparent 98%, var(--accent-teal) 100%);
+  background-size: 50px 50px;
+  opacity: 0.1;
+  animation: gridMove 10s linear infinite;
+}
+
+@keyframes bgPulse {
+  0% { background: linear-gradient(45deg, var(--dark-bg), #2d2d3d); }
+  100% { background: linear-gradient(45deg, #2d2d3d, var(--dark-bg)); }
+}
+
+@keyframes gridMove {
+  0% { transform: translate(0, 0); }
+  100% { transform: translate(50px, 50px); }
+}
+
+/* Main Content */
+.room-content {
+  background: var(--dark-card);
+  border: 3px solid var(--primary-orange);
+  border-radius: 15px;
+  padding: 40px;
+  max-width: 600px;
+  width: 100%;
+  text-align: center;
+  box-shadow: 
+    0 0 30px rgba(249, 102, 53, 0.3),
+    inset 0 0 30px rgba(0, 0, 0, 0.3);
+  animation: cardFloat 3s ease-in-out infinite alternate;
+}
+
+@keyframes cardFloat {
+  0% { transform: translateY(0px); }
+  100% { transform: translateY(-5px); }
+}
+
+/* Title */
+.game-title {
+  margin-bottom: 30px;
+}
+
+.neon-text {
+  font-size: 3rem;
+  font-weight: bold;
+  color: var(--accent-yellow);
+  text-shadow: 
+    0 0 10px var(--neon-glow),
+    0 0 20px var(--neon-glow),
+    0 0 40px var(--neon-glow);
+  animation: neonPulse 2s ease-in-out infinite alternate;
+  display: block;
+  letter-spacing: 3px;
+}
+
+.sub-title {
+  font-size: 1.2rem;
+  color: var(--accent-mint);
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  margin-top: 5px;
+  display: block;
+}
+
+@keyframes neonPulse {
+  0% { text-shadow: 0 0 10px var(--neon-glow), 0 0 20px var(--neon-glow), 0 0 40px var(--neon-glow); }
+  100% { text-shadow: 0 0 5px var(--neon-glow), 0 0 10px var(--neon-glow), 0 0 20px var(--neon-glow); }
+}
+
+/* Buttons */
+.retro-button {
+  background: linear-gradient(135deg, var(--primary-orange), #e55a2b);
+  border: none;
+  border-radius: 8px;
+  color: var(--text-light);
+  font-family: 'Courier New', monospace;
+  font-size: 1.1rem;
+  font-weight: bold;
+  padding: 15px 25px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  position: relative;
+  overflow: hidden;
+}
+
+.retro-button::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transition: left 0.5s;
+}
+
+.retro-button:hover::before {
+  left: 100%;
+}
+
+.retro-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 5px 15px rgba(249, 102, 53, 0.4);
+}
+
+.retro-button:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 5px rgba(249, 102, 53, 0.4);
+}
+
+/* Button Variants */
+.retro-button.primary {
+  background: linear-gradient(135deg, var(--primary-orange), #e55a2b);
+}
+
+.retro-button.secondary {
+  background: linear-gradient(135deg, var(--primary-green), #4a8f1c);
+}
+
+.retro-button.tertiary {
+  background: linear-gradient(135deg, var(--accent-teal), #239688);
+}
+
+.retro-button.danger {
+  background: linear-gradient(135deg, var(--danger-red), #cc2952);
+}
+
+/* Button Grid */
+.button-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  margin-top: 20px;
+}
+
+.button-group {
+  display: flex;
+  gap: 15px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 20px;
+}
+
+/* Form Sections */
+.form-section,
+.waiting-section,
+.pending-section,
+.room-ready-section {
+  animation: slideUp 0.5s ease-out;
+}
+
+@keyframes slideUp {
+  0% {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.section-title {
+  font-size: 1.8rem;
+  color: var(--accent-yellow);
+  margin-bottom: 25px;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+}
+
+/* Input Groups */
+.input-group {
+  margin-bottom: 20px;
+  text-align: left;
+}
+
+.input-label {
+  display: block;
+  color: var(--accent-mint);
+  font-size: 1rem;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.retro-input {
+  width: 100%;
+  padding: 15px;
+  background: var(--dark-bg);
+  border: 2px solid var(--accent-teal);
+  border-radius: 5px;
+  color: var(--text-light);
+  font-family: 'Courier New', monospace;
+  font-size: 1.1rem;
+  transition: all 0.3s ease;
+}
+
+.retro-input:focus {
+  outline: none;
+  border-color: var(--primary-orange);
+  box-shadow: 0 0 10px rgba(249, 102, 53, 0.3);
+}
+
+.retro-input::placeholder {
+  color: #888;
+}
+
+/* Room Info */
+.room-info {
+  background: var(--dark-bg);
+  border: 2px solid var(--accent-teal);
+  border-radius: 10px;
+  padding: 20px;
+  margin-bottom: 25px;
+}
+
+.room-code-display {
+  margin-bottom: 15px;
+}
+
+.room-code-label {
+  color: var(--accent-mint);
+  font-size: 1.1rem;
+  margin-right: 10px;
+}
+
+.room-code {
+  color: var(--accent-yellow);
+  font-size: 1.5rem;
+  font-weight: bold;
+  letter-spacing: 3px;
+}
+
+.room-link {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.link-input {
+  flex: 1;
+  font-size: 0.9rem !important;
+}
+
+.copy-btn {
+  white-space: nowrap;
+}
+
+/* Players List */
+.players-list {
+  background: var(--dark-bg);
+  border: 2px solid var(--primary-green);
+  border-radius: 10px;
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+.players-list h3 {
+  color: var(--primary-green);
+  margin-bottom: 15px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.player-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px;
+  background: var(--dark-card);
+  border-radius: 5px;
+  margin-bottom: 8px;
+  border-left: 3px solid var(--accent-mint);
+}
+
+.player-item:last-child {
+  margin-bottom: 0;
+}
+
+.host-badge {
+  background: var(--primary-orange);
+  color: var(--text-light);
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 0.8rem;
+  font-weight: bold;
+}
+
+/* Approval Section */
+.approval-section {
+  background: var(--dark-bg);
+  border: 2px solid var(--accent-yellow);
+  border-radius: 10px;
+  padding: 20px;
+  margin-bottom: 20px;
+  animation: pulseGlow 2s ease-in-out infinite alternate;
+}
+
+@keyframes pulseGlow {
+  0% { box-shadow: 0 0 10px rgba(250, 236, 134, 0.3); }
+  100% { box-shadow: 0 0 20px rgba(250, 236, 134, 0.6); }
+}
+
+.approval-section h3 {
+  color: var(--accent-yellow);
+  margin-bottom: 10px;
+}
+
+/* Loading Spinner */
+.loading-spinner {
+  width: 50px;
+  height: 50px;
+  border: 5px solid var(--dark-card);
+  border-top: 5px solid var(--primary-orange);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin: 20px auto;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Notifications */
+.notification {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  padding: 15px 20px;
+  border-radius: 8px;
+  font-weight: bold;
+  font-family: 'Courier New', monospace;
+  z-index: 1000;
+  max-width: 300px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  animation: slideInRight 0.3s ease-out;
+}
+
+@keyframes slideInRight {
+  0% {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.notification.info {
+  background: var(--accent-teal);
+  color: var(--text-light);
+}
+
+.notification.success {
+  background: var(--primary-green);
+  color: var(--text-light);
+}
+
+.notification.error {
+  background: var(--danger-red);
+  color: var(--text-light);
+}
+
+/* Waiting Text */
+.waiting-text {
+  color: var(--accent-mint);
+  font-size: 1.1rem;
+  font-style: italic;
+  animation: fadeInOut 2s ease-in-out infinite alternate;
+}
+
+@keyframes fadeInOut {
+  0% { opacity: 0.6; }
+  100% { opacity: 1; }
+}
+
+/* Start Game Button */
+.start-game-btn {
+  font-size: 1.3rem !important;
+  padding: 20px 40px !important;
+  background: linear-gradient(135deg, var(--primary-green), #4a8f1c) !important;
+  animation: pulseButton 1.5s ease-in-out infinite alternate;
+}
+
+@keyframes pulseButton {
+  0% { transform: scale(1); }
+  100% { transform: scale(1.05); }
+}
+
+/* Media Queries */
+
+/* Tablet */
+@media (max-width: 768px) {
+  .room-content {
+    padding: 30px 20px;
+    margin: 10px;
+  }
+  
+  .neon-text {
+    font-size: 2.5rem;
+  }
+  
+  .sub-title {
+    font-size: 1rem;
+  }
+  
+  .button-grid {
+    grid-template-columns: 1fr;
+    gap: 15px;
+  }
+  
+  .room-link {
+    flex-direction: column;
+    gap: 15px;
+  }
+  
+  .copy-btn {
+    width: 100%;
+  }
+  
+  .retro-button {
+    font-size: 1rem;
+    padding: 12px 20px;
+  }
+  
+  .notification {
+    right: 10px;
+    left: 10px;
+    max-width: none;
+  }
+  
+  .button-group {
+    flex-direction: column;
+  }
+  
+  .button-group .retro-button {
+    width: 100%;
+  }
+}
+
+/* Mobile */
+@media (max-width: 480px) {
+  .room-container {
+    padding: 10px;
+  }
+  
+  .room-content {
+    padding: 20px 15px;
+    border-radius: 10px;
+  }
+  
+  .neon-text {
+    font-size: 2rem;
+    letter-spacing: 2px;
+  }
+  
+  .sub-title {
+    font-size: 0.9rem;
+    letter-spacing: 1px;
+  }
+  
+  .section-title {
+    font-size: 1.5rem;
+    margin-bottom: 20px;
+  }
+  
+  .retro-input {
+    padding: 12px;
+    font-size: 1rem;
+  }
+  
+  .retro-button {
+    font-size: 0.9rem;
+    padding: 12px 18px;
+    letter-spacing: 0.5px;
+  }
+  
+  .room-info,
+  .players-list,
+  .approval-section {
+    padding: 15px;
+  }
+  
+  .room-code {
+    font-size: 1.2rem;
+    letter-spacing: 2px;
+  }
+  
+  .player-item {
+    padding: 8px;
+  }
+  
+  .start-game-btn {
+    font-size: 1.1rem !important;
+    padding: 15px 30px !important;
+  }
+  
+  .notification {
+    top: 10px;
+    font-size: 0.9rem;
+    padding: 12px 15px;
+  }
+}
+
+/* Small Mobile */
+@media (max-width: 360px) {
+  .neon-text {
+    font-size: 1.8rem;
+  }
+  
+  .room-content {
+    padding: 15px 10px;
+  }
+  
+  .retro-button {
+    font-size: 0.8rem;
+    padding: 10px 15px;
+  }
+  
+  .room-code {
+    font-size: 1rem;
+    letter-spacing: 1px;
+  }
+  
+  .input-label {
+    font-size: 0.9rem;
+  }
+  
+  .retro-input {
+    font-size: 0.9rem;
+    padding: 10px;
+  }
+}
