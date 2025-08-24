@@ -20,6 +20,24 @@ const Room = () => {
   const backend_url = import.meta.env.VITE_URL || 'http://localhost:3000';
   console.log('Backend URL:', backend_url);
 
+  // Create refs to hold current values
+  const gameDataRef = useRef({
+    generatedRoomCode: '',
+    roomCode: '',
+    players: [],
+    isHost: false
+  });
+
+  // Update refs whenever state changes
+  useEffect(() => {
+    gameDataRef.current = {
+      generatedRoomCode,
+      roomCode,
+      players,
+      isHost
+    };
+  }, [generatedRoomCode, roomCode, players, isHost]);
+
   useEffect(() => {
     // Initialize socket connection
     socketRef.current = io(backend_url, { 
@@ -51,7 +69,8 @@ const Room = () => {
 
     socket.on('playerJoinRequest', (data) => {
       console.log('Player join request:', data);
-      if (isHost || gameState === 'waiting') {
+      // Use current gameDataRef values
+      if (gameDataRef.current.isHost || gameState === 'waiting') {
         setPendingPlayer(data.player);
         showNotification(`${data.player.username} wants to join the game`, 'info');
       }
@@ -78,10 +97,32 @@ const Room = () => {
       showNotification(`${data.newPlayer.username} joined the game!`, 'success');
     });
 
-    socket.on('gameStarted', () => {
+    socket.on('gameStarted', (data) => {
+      console.log('Game started event received:', data);
       showNotification('Game starting...', 'success');
+      
+      // Use current values from ref instead of stale closure values
+      const currentData = gameDataRef.current;
+      
+      // Prepare game data (WITHOUT socket)
+      const gameData = {
+        roomCode: currentData.generatedRoomCode || currentData.roomCode,
+        players: currentData.players,
+        isHost: currentData.isHost,
+        currentPlayer: currentData.players.find(p => p.id === socket.id),
+        gameState: data.gameState,
+        playerRacks: data.playerRacks,
+        tileBagCount: data.tileBag,
+        // Don't include socket here!
+      };
+      
+      console.log('Navigating to game with data:', gameData);
+      console.log('Current ref data:', currentData);
+      
       setTimeout(() => {
-        navigate('/game'); // Navigate to game page
+        navigate('/game', { 
+          state: gameData
+        });
       }, 2000);
     });
 
@@ -115,29 +156,7 @@ const Room = () => {
         socketRef.current.disconnect();
       }
     };
-  }, [joinCode, navigate]);
-
-  // Update isHost dependency to re-setup listeners when host status changes
-  useEffect(() => {
-    const socket = socketRef.current;
-    if (!socket) return;
-
-    // Re-setup player join request listener when host status changes
-    const handlePlayerJoinRequest = (data) => {
-      console.log('Player join request (host check):', data, 'isHost:', isHost, 'gameState:', gameState);
-      if (isHost || gameState === 'waiting') {
-        setPendingPlayer(data.player);
-        showNotification(`${data.player.username} wants to join the game`, 'info');
-      }
-    };
-
-    socket.off('playerJoinRequest');
-    socket.on('playerJoinRequest', handlePlayerJoinRequest);
-
-    return () => {
-      socket.off('playerJoinRequest');
-    };
-  }, [isHost, gameState]);
+  }, [joinCode, navigate, username]); // Added username to dependencies
 
   const showNotification = (message, type = 'info') => {
     setNotification(message);
@@ -224,20 +243,17 @@ const Room = () => {
   };
 
   const handleStartGame = () => {
-  if (players.length >= 2) {
-    if (socketRef.current && generatedRoomCode) {
-      console.log('Starting game with roomCode:', generatedRoomCode);
-      // Use the room's startGame event (not the game's startGame event)
-      socketRef.current.emit('startGame', { roomCode: generatedRoomCode });
-    } else if (socketRef.current) {
-      // Fallback: emit without roomCode (server will handle it)
-      console.log('Starting game without explicit roomCode');
-      socketRef.current.emit('startGame');
+    if (players.length >= 2) {
+      if (socketRef.current) {
+        const currentRoomCode = generatedRoomCode || roomCode;
+        console.log('Starting game with roomCode:', currentRoomCode);
+        console.log('Current players:', players);
+        socketRef.current.emit('startGame');
+      }
+    } else {
+      showNotification('Need at least 2 players to start the game', 'error');
     }
-  } else {
-    showNotification('Need at least 2 players to start the game', 'error');
-  }
-};
+  };
 
   const copyRoomLink = () => {
     const roomLink = `${window.location.origin}/join/${generatedRoomCode}`;

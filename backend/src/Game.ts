@@ -523,11 +523,57 @@ function finalizeScore(gameState: GameState): Record<string, number> {
 // --------------------
 // Socket.IO handlers
 // --------------------
+// Add this to your game.ts file - uncomment and fix the startGame handler
 export function registerGameHandlers(io: Server, socket: Socket) {
-  /*
-  socket.on('startGame', (data: { roomCode: string }) => {
-    console.log(data);
-    const { roomCode } = data;
+  // Add the updateSocketId handler to handle socket ID changes
+  socket.on('updateSocketId', (data: { roomCode: string; oldSocketId?: string; newSocketId: string; playerId: string }) => {
+    const { roomCode, oldSocketId, newSocketId, playerId } = data;
+    console.log(`Updating socket ID for player ${playerId} in room ${roomCode}: ${oldSocketId} -> ${newSocketId}`);
+    
+    const gameState = gameStates.get(roomCode);
+    const room = rooms.get(roomCode);
+    
+    if (!gameState || !room) {
+      socket.emit('error', { message: 'Game not found' });
+      return;
+    }
+    
+    // Update player socket ID in game state
+    const player = gameState.players.find(p => p.id === playerId);
+    if (player) {
+      player.socketId = newSocketId;
+      console.log(`Updated player ${player.username} socket ID to ${newSocketId}`);
+    }
+    
+    // Update player socket ID in room
+    const roomPlayer = room.players.find(p => p.id === playerId);
+    if (roomPlayer) {
+      roomPlayer.socketId = newSocketId;
+    }
+    
+    // Update playerRooms mapping
+    if (oldSocketId) {
+      playerRooms.delete(oldSocketId);
+    }
+    playerRooms.set(newSocketId, roomCode);
+    
+    // Join the socket room
+    socket.join(roomCode);
+    
+    socket.emit('socketUpdated', { roomCode });
+    console.log(`Socket ID updated successfully for player ${playerId}`);
+  });
+
+  // Fix the startGame handler (uncomment and update)
+  socket.on('startGame', () => {
+    // Find which room this socket belongs to
+    const roomCode = Array.from(socket.rooms).find(room => room !== socket.id);
+    
+    if (!roomCode) {
+      socket.emit('error', { message: 'Room not found' });
+      return;
+    }
+
     const room = rooms.get(roomCode);
     
     if (!room || room.host.socketId !== socket.id) {
@@ -543,6 +589,13 @@ export function registerGameHandlers(io: Server, socket: Socket) {
     room.gameStarted = true;
     const gameState = initializeGameState(roomCode, room.players);
     
+    console.log('Game started, initial game state:', {
+      roomCode,
+      playersCount: gameState.players.length,
+      playerRacksKeys: Object.keys(gameState.playerRacks),
+      tileBagCount: gameState.tileBag.length
+    });
+    
     // Emit to all players in room
     io.to(roomCode).emit('gameStarted', {
       gameState: {
@@ -557,8 +610,45 @@ export function registerGameHandlers(io: Server, socket: Socket) {
     
     console.log(`Game started in room ${roomCode}`);
   });
-*/
-  socket.on('submitMove', async (data: { 
+
+  // Update the getGameState handler to be more robust
+  socket.on('getGameState', (data: { roomCode: string }) => {
+    const { roomCode } = data;
+    const gameState = gameStates.get(roomCode);
+    
+    if (!gameState) {
+      console.log(`Game state not found for room ${roomCode}`);
+      socket.emit('error', { message: 'Game not found' });
+      return;
+    }
+    
+    // Find the current player based on socket ID
+    const currentPlayer = gameState.players.find(p => p.socketId === socket.id);
+    if (!currentPlayer) {
+      console.log(`Current player not found for socket ${socket.id} in room ${roomCode}`);
+      socket.emit('error', { message: 'Player not found' });
+      return;
+    }
+    
+    console.log(`Sending game state to player ${currentPlayer.username}:`, {
+      hasBoard: !!gameState.board,
+      scoresCount: Object.keys(gameState.scores).length,
+      currentTurn: gameState.currentTurn,
+      playersCount: gameState.players.length,
+      playerRackSize: gameState.playerRacks[currentPlayer.id]?.length || 0
+    });
+    
+    socket.emit('gameState', {
+      board: gameState.board,
+      scores: gameState.scores,
+      currentTurn: gameState.currentTurn,
+      players: gameState.players,
+      playerRacks: { [currentPlayer.id]: gameState.playerRacks[currentPlayer.id] || [] },
+      gameEnded: gameState.gameEnded,
+      wordsPlayed: gameState.wordsPlayed
+    });
+
+   socket.on('submitMove', async (data: { 
     roomCode: string; 
     placedTiles: PlacedTile[]; 
     board: (Tile | null)[][]; 
@@ -787,41 +877,11 @@ export function registerGameHandlers(io: Server, socket: Socket) {
     console.log(`${currentPlayer.username} exchanged ${tilesToExchange.length} tiles in room ${roomCode}`);
   });
 
-  socket.on('getGameState', (data: { roomCode: string }) => {
-    const { roomCode } = data;
-    const gameState = gameStates.get(roomCode);
-    
-    if (!gameState) {
-      socket.emit('error', { message: 'Game not found' });
-      return;
-    }
-    
-    const playerRoomCode = playerRooms.get(socket.id);
-    if (playerRoomCode !== roomCode) {
-      socket.emit('error', { message: 'Not in this game' });
-      return;
-    }
-    
-    const currentPlayer = gameState.players.find(p => p.socketId === socket.id);
-    if (!currentPlayer) {
-      socket.emit('error', { message: 'Player not found' });
-      return;
-    }
-    
-    socket.emit('gameState', {
-      board: gameState.board,
-      scores: gameState.scores,
-      currentTurn: gameState.currentTurn,
-      players: gameState.players,
-      playerRacks: { [currentPlayer.id]: gameState.playerRacks[currentPlayer.id] },
-      gameEnded: gameState.gameEnded,
-      wordsPlayed: gameState.wordsPlayed
-    });
-  });
-
-  socket.on('disconnect', () => {
+   
+socket.on('disconnect', () => {
     // Handle player disconnection during game
-    const roomCode = playerRooms.get(socket.id);
+    const roomCode = Array.from(socket.rooms).find(room => room !== socket.id);
+    
     if (roomCode) {
       const gameState = gameStates.get(roomCode);
       const room = rooms.get(roomCode);
@@ -836,4 +896,4 @@ export function registerGameHandlers(io: Server, socket: Socket) {
       }
     }
   });
-}
+})}

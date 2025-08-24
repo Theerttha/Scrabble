@@ -1,5 +1,6 @@
-
 import React, { useState, useEffect, useRef } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { io } from 'socket.io-client';
 import '../styles/game.css';
 
 const BOARD_SIZE = 15;
@@ -26,7 +27,9 @@ const PREMIUM_SQUARES = {
   'TL': [[1,5],[1,9],[5,1],[5,5],[5,9],[5,13],[9,1],[9,5],[9,9],[9,13],[13,5],[13,9]]
 };
 
-const Game = ({ socket, roomCode, currentPlayer, players, isHost }) => {
+const Game = () => {
+  const location = useLocation();
+  const navigate = useNavigate();
   const [board, setBoard] = useState(() => Array(BOARD_SIZE).fill().map(() => Array(BOARD_SIZE).fill(null)));
   const [playerRack, setPlayerRack] = useState([]);
   const [selectedTile, setSelectedTile] = useState(null);
@@ -40,87 +43,224 @@ const Game = ({ socket, roomCode, currentPlayer, players, isHost }) => {
   const [exchangeTiles, setExchangeTiles] = useState([]);
   const [message, setMessage] = useState('');
   const boardRef = useRef(null);
+  const socketRef = useRef(null);
 
-  // Initialize game
+  // Game data
+  const [roomCode, setRoomCode] = useState('');
+  const [currentPlayer, setCurrentPlayer] = useState(null);
+  const [players, setPlayers] = useState([]);
+  const [isHost, setIsHost] = useState(false);
+  const [isConnected, setIsConnected] = useState(false);
+  const [gameDataLoaded, setGameDataLoaded] = useState(false);
+  const [socketReady, setSocketReady] = useState(false);
+
+  const backend_url = import.meta.env.VITE_URL || 'http://localhost:3000';
+
+  // Initialize game from location state
   useEffect(() => {
-    if (socket && !gameStarted) {
-      socket.on('gameStarted', handleGameStarted);
-      socket.on('gameState', handleGameState);
-      socket.on('turnChanged', handleTurnChanged);
-      socket.on('moveSubmitted', handleMoveSubmitted);
-      socket.on('tilesDrawn', handleTilesDrawn);
-      socket.on('gameMessage', (data) => setMessage(data.message));
-
-      return () => {
-        socket.off('gameStarted');
-        socket.off('gameState');
-        socket.off('turnChanged');
-        socket.off('moveSubmitted');
-        socket.off('tilesDrawn');
-        socket.off('gameMessage');
-      };
+    console.log('Game component mounted, location.state:', location.state);
+    
+    if (!location.state || !location.state.roomCode) {
+      console.error('No game data found, redirecting to home');
+      navigate('/');
+      return;
     }
-  }, [socket, gameStarted]);
 
-  // Initialize tile bag
-  const createTileBag = () => {
-    const bag = [];
-    Object.entries(TILE_DISTRIBUTION).forEach(([letter, data]) => {
-      for (let i = 0; i < data.count; i++) {
-        bag.push({ letter, value: data.value, id: Math.random().toString(36) });
-      }
+    const gameData = location.state;
+    console.log('Setting up game with data:', gameData);
+
+    // Set game data
+    setRoomCode(gameData.roomCode);
+    setCurrentPlayer(gameData.currentPlayer);
+    setPlayers(gameData.players || []);
+    setIsHost(gameData.isHost || false);
+
+    // Set initial game state if available
+    if (gameData.gameState) {
+      setBoard(gameData.gameState.board || Array(BOARD_SIZE).fill().map(() => Array(BOARD_SIZE).fill(null)));
+      setScores(gameData.gameState.scores || {});
+      setCurrentTurn(gameData.gameState.currentTurn || 0);
+    }
+
+    // Set player rack if available
+    if (gameData.playerRacks && gameData.currentPlayer) {
+      console.log('Setting initial player rack:', gameData.playerRacks[gameData.currentPlayer.id]);
+      setPlayerRack(gameData.playerRacks[gameData.currentPlayer.id] || []);
+    }
+
+    setGameDataLoaded(true);
+    setMessage('Connecting to game...');
+
+  }, [location.state, navigate]);
+
+  // Initialize socket connection after game data is loaded
+  useEffect(() => {
+    if (!gameDataLoaded || !roomCode) return;
+
+    console.log('Creating socket connection for room:', roomCode);
+    
+    // Create new socket connection
+    const newSocket = io(backend_url, {
+      transports: ["websocket"],
+      autoConnect: true,
+      reconnection: true,
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000,
+      timeout: 10000
     });
-    return shuffleArray(bag);
-  };
 
-  const shuffleArray = (array) => {
-    const shuffled = [...array];
-    for (let i = shuffled.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-    }
-    return shuffled;
-  };
+    socketRef.current = newSocket;
 
-  const handleGameStarted = (data) => {
-    setGameStarted(true);
-    setTileBag(data.tileBag);
-    setPlayerRack(data.playerRacks[currentPlayer.id] || []);
-    setScores(data.scores || {});
-    setCurrentTurn(data.currentTurn || 0);
-    setMessage('Game started! Place tiles to form words.');
-  };
+    // Set up basic connection handlers
+    newSocket.on('connect', () => {
+      console.log('Socket connected with ID:', newSocket.id);
+      setIsConnected(true);
+      
+      // Update current player with new socket ID
+      setCurrentPlayer(prev => ({
+        ...prev,
+        socketId: newSocket.id
+      }));
+      
+      // Join the room with updated socket info
+      console.log('Joining room with updated socket ID');
+      newSocket.emit('updateSocketId', { 
+        roomCode, 
+        oldSocketId: currentPlayer?.socketId,
+        newSocketId: newSocket.id,
+        playerId: currentPlayer?.id 
+      });
+      
+      setSocketReady(true);
+      setMessage('Connected! Loading game...');
+    });
 
-  const handleGameState = (data) => {
-    setBoard(data.board);
-    setScores(data.scores);
-    setCurrentTurn(data.currentTurn);
-    setPlayerRack(data.playerRacks[currentPlayer.id] || []);
-  };
+    newSocket.on('disconnect', (reason) => {
+      console.log('Socket disconnected:', reason);
+      setIsConnected(false);
+      setSocketReady(false);
+      setMessage('Connection lost. Reconnecting...');
+    });
 
-  const handleTurnChanged = (data) => {
-    setCurrentTurn(data.currentTurn);
-    setMessage(data.message);
-  };
+    newSocket.on('connect_error', (error) => {
+      console.error('Connection error:', error);
+      setMessage('Connection failed. Retrying...');
+    });
 
-  const handleMoveSubmitted = (data) => {
-    setBoard(data.board);
-    setScores(data.scores);
-    setPlacedTiles([]);
-    setSelectedTile(null);
-  };
+    return () => {
+      if (socketRef.current) {
+        console.log('Cleaning up socket connection');
+        socketRef.current.disconnect();
+        socketRef.current = null;
+      }
+    };
+  }, [gameDataLoaded, roomCode, backend_url]);
 
-  const handleTilesDrawn = (data) => {
-    if (data.playerId === currentPlayer.id) {
-      setPlayerRack(data.tiles);
-    }
-  };
+  // Initialize socket listeners after socket is ready
+  useEffect(() => {
+    if (!socketRef.current || !socketReady || !roomCode || !currentPlayer) return;
 
-  const startGame = () => {
-    if (isHost && socket) {
-      socket.emit('startGame', { roomCode });
-    }
-  };
+    const socket = socketRef.current;
+    console.log('Setting up socket listeners for game');
+
+    const handleSocketUpdated = () => {
+      console.log('Socket ID updated successfully, requesting game state');
+      socket.emit('getGameState', { roomCode });
+      setGameStarted(true);
+      setMessage('Game loaded! Place tiles to form words.');
+    };
+
+    const handleGameState = (data) => {
+      console.log('Received game state:', data);
+      
+      if (data.board) setBoard(data.board);
+      if (data.scores) setScores(data.scores);
+      if (typeof data.currentTurn === 'number') setCurrentTurn(data.currentTurn);
+      
+      if (data.players) {
+        setPlayers(data.players);
+        // Update current player info
+        const updatedPlayer = data.players.find(p => p.id === currentPlayer.id);
+        if (updatedPlayer) {
+          setCurrentPlayer(updatedPlayer);
+        }
+      }
+      
+      if (data.playerRacks && currentPlayer) {
+        console.log('Updating player rack from game state:', data.playerRacks[currentPlayer.id]);
+        setPlayerRack(data.playerRacks[currentPlayer.id] || []);
+      }
+    };
+
+    const handleTurnChanged = (data) => {
+      console.log('Turn changed:', data);
+      setCurrentTurn(data.currentTurn);
+      setMessage(data.message);
+    };
+
+    const handleMoveSubmitted = (data) => {
+      console.log('Move submitted:', data);
+      if (data.board) setBoard(data.board);
+      if (data.scores) setScores(data.scores);
+      setPlacedTiles([]);
+      setSelectedTile(null);
+    };
+
+    const handleTilesDrawn = (data) => {
+      console.log('Tiles drawn event:', data);
+      if (currentPlayer && data.playerId === currentPlayer.id) {
+        console.log('Updating player rack with new tiles:', data.tiles);
+        setPlayerRack(data.tiles);
+      }
+    };
+
+    const handleGameMessage = (data) => {
+      console.log('Game message:', data);
+      setMessage(data.message);
+    };
+
+    const handleGameEnded = (data) => {
+      console.log('Game ended:', data);
+      setMessage(`Game Over! Winner: ${data.winner}`);
+    };
+
+    const handleError = (error) => {
+      console.error('Game error:', error);
+      setMessage(`Error: ${error.message}`);
+      
+      // If player not found, try to update socket ID again
+      if (error.message === 'Player not found') {
+        console.log('Player not found, updating socket ID again');
+        socket.emit('updateSocketId', { 
+          roomCode, 
+          oldSocketId: currentPlayer?.socketId,
+          newSocketId: socket.id,
+          playerId: currentPlayer?.id 
+        });
+      }
+    };
+
+    // Attach listeners
+    socket.on('socketUpdated', handleSocketUpdated);
+    socket.on('gameState', handleGameState);
+    socket.on('turnChanged', handleTurnChanged);
+    socket.on('moveSubmitted', handleMoveSubmitted);
+    socket.on('tilesDrawn', handleTilesDrawn);
+    socket.on('gameMessage', handleGameMessage);
+    socket.on('gameEnded', handleGameEnded);
+    socket.on('error', handleError);
+
+    return () => {
+      socket.off('socketUpdated', handleSocketUpdated);
+      socket.off('gameState', handleGameState);
+      socket.off('turnChanged', handleTurnChanged);
+      socket.off('moveSubmitted', handleMoveSubmitted);
+      socket.off('tilesDrawn', handleTilesDrawn);
+      socket.off('gameMessage', handleGameMessage);
+      socket.off('gameEnded', handleGameEnded);
+      socket.off('error', handleError);
+    };
+  }, [socketReady, roomCode, currentPlayer]);
 
   const getPremiumType = (row, col) => {
     for (const [type, positions] of Object.entries(PREMIUM_SQUARES)) {
@@ -207,17 +347,31 @@ const Game = ({ socket, roomCode, currentPlayer, players, isHost }) => {
   };
 
   const submitMove = () => {
-    if (placedTiles.length === 0) return;
+    if (placedTiles.length === 0) {
+      setMessage('Please place at least one tile');
+      return;
+    }
 
-    socket.emit('submitMove', {
-      roomCode,
-      placedTiles,
-      board: board
-    });
+    if (socketRef.current && isConnected) {
+      console.log('Submitting move:', placedTiles);
+      socketRef.current.emit('submitMove', {
+        roomCode,
+        placedTiles,
+        board: board
+      });
+      setMessage('Submitting move...');
+    } else {
+      setMessage('Not connected to server');
+    }
   };
 
   const passTurn = () => {
-    socket.emit('passTurn', { roomCode });
+    if (socketRef.current && isConnected) {
+      socketRef.current.emit('passTurn', { roomCode });
+      setMessage('Passing turn...');
+    } else {
+      setMessage('Not connected to server');
+    }
     setPlacedTiles([]);
     setSelectedTile(null);
   };
@@ -225,20 +379,28 @@ const Game = ({ socket, roomCode, currentPlayer, players, isHost }) => {
   const exchangeTilesAction = () => {
     if (exchangeTiles.length === 0) return;
 
-    socket.emit('exchangeTiles', {
-      roomCode,
-      tilesToExchange: exchangeTiles
-    });
+    if (socketRef.current && isConnected) {
+      socketRef.current.emit('exchangeTiles', {
+        roomCode,
+        tilesToExchange: exchangeTiles
+      });
+      setMessage(`Exchanging ${exchangeTiles.length} tiles...`);
+    } else {
+      setMessage('Not connected to server');
+    }
 
     setShowExchange(false);
     setExchangeTiles([]);
   };
 
   const isCurrentPlayerTurn = () => {
-    return players[currentTurn]?.id === currentPlayer.id;
+    if (!players || !currentPlayer || !gameStarted) return false;
+    const currentTurnPlayer = players[currentTurn];
+    return currentTurnPlayer?.id === currentPlayer.id;
   };
 
   const getCurrentPlayerName = () => {
+    if (!players || players.length === 0) return 'Unknown';
     return players[currentTurn]?.username || 'Unknown';
   };
 
@@ -251,27 +413,27 @@ const Game = ({ socket, roomCode, currentPlayer, players, isHost }) => {
     }
   };
 
-  if (!gameStarted) {
+  // Loading state while game data is being set up
+  if (!gameDataLoaded || !socketReady || !gameStarted || !players || players.length === 0 || !currentPlayer) {
     return (
       <div className="game-container">
         <div className="game-waiting">
           <div className="neon-box">
             <h2>🎮 RETRO SCRABBLE</h2>
-            <div className="player-list">
-              {players.map((player, index) => (
-                <div key={player.id} className="player-item">
-                  <span className={player.isHost ? 'host-badge' : ''}>{player.username}</span>
-                  {player.isHost && <span className="crown">👑</span>}
-                </div>
-              ))}
+            <p>
+              {!gameDataLoaded ? 'Loading game data...' : 
+               !isConnected ? 'Connecting to server...' :
+               !socketReady ? 'Setting up connection...' :
+               !gameStarted ? 'Loading game state...' :
+               'Setting up game...'}
+            </p>
+            <div className="loading-spinner"></div>
+            <div style={{marginTop: '10px', fontSize: '12px', color: '#888'}}>
+              Status: {isConnected ? '🟢 Connected' : '🔴 Disconnected'}
             </div>
-            {isHost ? (
-              <button className="start-btn neon-btn" onClick={startGame}>
-                START GAME
-              </button>
-            ) : (
-              <p className="waiting-message">Waiting for host to start the game...</p>
-            )}
+            <button className="start-btn neon-btn" onClick={() => navigate('/')}>
+              BACK TO HOME
+            </button>
           </div>
         </div>
       </div>
@@ -287,6 +449,9 @@ const Game = ({ socket, roomCode, currentPlayer, players, isHost }) => {
           <span className="current-turn">
             {isCurrentPlayerTurn() ? "YOUR TURN" : `${getCurrentPlayerName()}'S TURN`}
           </span>
+          <div className="connection-status">
+            {isConnected ? '🟢 Connected' : '🔴 Disconnected'}
+          </div>
         </div>
       </div>
 
@@ -295,9 +460,12 @@ const Game = ({ socket, roomCode, currentPlayer, players, isHost }) => {
         {players.map((player, index) => (
           <div 
             key={player.id} 
-            className={`score-item ${index === currentTurn ? 'active-player' : ''}`}
+            className={`score-item ${index === currentTurn ? 'active-player' : ''} ${player.id === currentPlayer.id ? 'current-user' : ''}`}
           >
-            <span className="player-name">{player.username}</span>
+            <span className="player-name">
+              {player.username}
+              {player.id === currentPlayer.id && ' (You)'}
+            </span>
             <span className="score">{scores[player.id] || 0}</span>
           </div>
         ))}
@@ -320,7 +488,7 @@ const Game = ({ socket, roomCode, currentPlayer, players, isHost }) => {
             return (
               <div
                 key={`${rowIndex}-${colIndex}`}
-                className={`board-cell ${premiumType ? `premium-${premiumType.toLowerCase()}` : ''} ${isCenter ? 'center-star' : ''}`}
+                className={`board-cell ${premiumType ? `premium-${premiumType.toLowerCase()}` : ''} ${isCenter ? 'center-star' : ''} ${isCurrentPlayerTurn() ? 'clickable' : ''}`}
                 onClick={() => handleCellClick(rowIndex, colIndex)}
                 onDragOver={handleDragOver}
                 onDrop={(e) => handleDrop(e, rowIndex, colIndex)}
@@ -350,33 +518,37 @@ const Game = ({ socket, roomCode, currentPlayer, players, isHost }) => {
 
       {/* Player Rack */}
       <div className="player-rack">
-        <div className="rack-label">YOUR TILES</div>
+        <div className="rack-label">YOUR TILES ({playerRack.length})</div>
         <div className="tile-rack">
-          {playerRack.map((tile, index) => (
-            <div
-              key={`${tile.id}-${index}`}
-              className={`rack-tile ${selectedTile?.id === tile.id ? 'selected' : ''}`}
-              draggable={isCurrentPlayerTurn()}
-              onClick={() => handleTileClick(tile, index)}
-              onDragStart={(e) => handleDragStart(e, tile, index)}
-            >
-              <span className="tile-letter">{tile.letter === 'BLANK' ? '?' : tile.letter}</span>
-              <span className="tile-value">{tile.value}</span>
-            </div>
-          ))}
+          {playerRack.length === 0 ? (
+            <div className="empty-rack">No tiles available</div>
+          ) : (
+            playerRack.map((tile, index) => (
+              <div
+                key={`${tile.id}-${index}`}
+                className={`rack-tile ${selectedTile?.id === tile.id ? 'selected' : ''} ${isCurrentPlayerTurn() ? 'interactive' : 'disabled'}`}
+                draggable={isCurrentPlayerTurn()}
+                onClick={() => handleTileClick(tile, index)}
+                onDragStart={(e) => handleDragStart(e, tile, index)}
+              >
+                <span className="tile-letter">{tile.letter === 'BLANK' ? '?' : tile.letter}</span>
+                <span className="tile-value">{tile.value}</span>
+              </div>
+            ))
+          )}
         </div>
       </div>
 
       {/* Game Actions */}
       <div className="game-actions">
-        {isCurrentPlayerTurn() && (
+        {isCurrentPlayerTurn() && isConnected ? (
           <>
             <button 
               className="action-btn recall-btn" 
               onClick={recallTiles}
               disabled={placedTiles.length === 0}
             >
-              RECALL
+              RECALL ({placedTiles.length})
             </button>
             <button 
               className="action-btn submit-btn neon-btn" 
@@ -394,10 +566,17 @@ const Game = ({ socket, roomCode, currentPlayer, players, isHost }) => {
             <button 
               className="action-btn exchange-btn" 
               onClick={() => setShowExchange(true)}
+              disabled={playerRack.length === 0}
             >
               EXCHANGE
             </button>
           </>
+        ) : (
+          <div className="turn-info">
+            {!isConnected ? 'Reconnecting...' : 
+             !isCurrentPlayerTurn() ? `Waiting for ${getCurrentPlayerName()}...` : 
+             'Loading...'}
+          </div>
         )}
       </div>
 

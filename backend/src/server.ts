@@ -327,6 +327,7 @@ io.on('connection', (socket) => {
   });
   
   // Start game event
+  /*
   socket.on('startGame', () => {
     try {
       const roomCode = playerRooms.get(socket.id);
@@ -388,7 +389,7 @@ io.on('connection', (socket) => {
       });
     }
   });
-  
+  */
   // Handle disconnection
   socket.on('disconnect', () => {
     try {
