@@ -17,7 +17,7 @@ const Room = () => {
   const navigate = useNavigate();
   const { joinCode } = useParams();
   
-  const backend_url = import.meta.env.VITE_URL || 'http://localhost:3001';
+  const backend_url = import.meta.env.VITE_URL || 'http://localhost:3000';
   console.log('Backend URL:', backend_url);
 
   useEffect(() => {
@@ -224,14 +224,20 @@ const Room = () => {
   };
 
   const handleStartGame = () => {
-    if (players.length >= 2) {
-      if (socketRef.current) {
-        socketRef.current.emit('startGame');
-      }
-    } else {
-      showNotification('Need at least 2 players to start the game', 'error');
+  if (players.length >= 2) {
+    if (socketRef.current && generatedRoomCode) {
+      console.log('Starting game with roomCode:', generatedRoomCode);
+      // Use the room's startGame event (not the game's startGame event)
+      socketRef.current.emit('startGame', { roomCode: generatedRoomCode });
+    } else if (socketRef.current) {
+      // Fallback: emit without roomCode (server will handle it)
+      console.log('Starting game without explicit roomCode');
+      socketRef.current.emit('startGame');
     }
-  };
+  } else {
+    showNotification('Need at least 2 players to start the game', 'error');
+  }
+};
 
   const copyRoomLink = () => {
     const roomLink = `${window.location.origin}/join/${generatedRoomCode}`;
