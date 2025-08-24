@@ -142,7 +142,7 @@ const Room = () => {
 
     socket.on('disconnect', () => {
       console.log('Disconnected from server');
-      showNotification('Disconnected from server', 'error');
+      //showNotification('Disconnected from server', 'error');
     });
 
     // Check if there's a join code in the URL
@@ -429,7 +429,7 @@ const Room = () => {
               {players.map((player, index) => (
                 <div key={player.id} className="player-item">
                   <span>{player.username}</span>
-                  {player.isHost && <span className="host-badge">HOST</span>}
+  
                 </div>
               ))}
             </div>
