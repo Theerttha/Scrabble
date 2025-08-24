@@ -1,0 +1,38 @@
+:
+
+📝 Scrabble (Multiplayer Online)
+
+A real-time Scrabble game built with TypeScript, Socket.IO, and React.
+Play with friends online in private rooms, take turns placing words on the board, and enjoy the classic Scrabble experience in your browser.
+
+🚀 Features
+
+🎮 Real-time multiplayer gameplay
+
+👥 Create and join game rooms
+
+🧩 Interactive Scrabble board with drag-and-drop tiles
+
+🔤 Word validation using dictionary API
+
+⚡ Fast updates powered by Socket.IO
+
+🖥️ Built with React (frontend) and TypeScript (backend)
+
+🛠️ Tech Stack
+
+Frontend: React, Vite
+
+Backend: Node.js, Express, Socket.IO, TypeScript
+
+Deployment: Render 
+
+
+
+🎯 How to Play
+
+Create a room or join an existing one with a room code.
+
+Take turns placing words on the board.
+
+Scores update automatically as you play.
