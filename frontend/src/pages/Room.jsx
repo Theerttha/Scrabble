@@ -386,7 +386,7 @@ const Room = () => {
               {players.map((player, index) => (
                 <div key={player.id} className="player-item">
                   <span>{player.username}</span>
-                  {player.isHost && <span className="host-badge">HOST</span>}
+             
                 </div>
               ))}
             </div>
