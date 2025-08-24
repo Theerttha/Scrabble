@@ -173,7 +173,12 @@ const Game = () => {
     const handleGameState = (data) => {
       console.log('Received game state:', data);
       
-      if (data.board) setBoard(data.board);
+      // FIXED: Always update board state for all players
+      if (data.board) {
+        console.log('Updating board from game state');
+        setBoard(data.board);
+      }
+      
       if (data.scores) setScores(data.scores);
       if (typeof data.currentTurn === 'number') setCurrentTurn(data.currentTurn);
       
@@ -186,10 +191,13 @@ const Game = () => {
         }
       }
       
+      // FIXED: Ensure player rack is updated for the requesting player
       if (data.playerRacks && currentPlayer) {
         console.log('Updating player rack from game state:', data.playerRacks[currentPlayer.id]);
         setPlayerRack(data.playerRacks[currentPlayer.id] || []);
       }
+      
+      setMessage('Game synchronized successfully!');
     };
 
     const handleTurnChanged = (data) => {
@@ -281,9 +289,28 @@ const Game = () => {
     }
   };
 
-  const handleCellClick = (row, col) => {
-    if (!isCurrentPlayerTurn() || board[row][col]) return;
+  // FIXED: Check if tile is from current turn (can be moved)
+  const isTileMoveable = (row, col) => {
+    return placedTiles.some(placed => placed.row === row && placed.col === col);
+  };
 
+  // FIXED: Handle clicking on placed tiles to move them
+  const handleCellClick = (row, col) => {
+    if (!isCurrentPlayerTurn()) return;
+
+    const cellTile = board[row][col];
+    
+    // If clicking on a moveable tile (placed this turn)
+    if (cellTile && isTileMoveable(row, col)) {
+      // Remove tile from board and add back to rack
+      removeTileFromBoard(row, col);
+      return;
+    }
+
+    // If cell is occupied by a permanent tile, can't place here
+    if (cellTile) return;
+
+    // Place selected tile if we have one
     if (selectedTile) {
       placeTile(row, col, selectedTile);
       setSelectedTile(null);
@@ -298,6 +325,26 @@ const Game = () => {
     } else {
       setSelectedTile({ ...tile, rackIndex: index });
     }
+  };
+
+  // FIXED: New function to remove tile from board and return to rack
+  const removeTileFromBoard = (row, col) => {
+    const placedTileInfo = placedTiles.find(placed => placed.row === row && placed.col === col);
+    if (!placedTileInfo) return;
+
+    // Remove from board
+    const newBoard = board.map(boardRow => [...boardRow]);
+    newBoard[row][col] = null;
+    setBoard(newBoard);
+
+    // Add back to rack
+    const newRack = [...playerRack, placedTileInfo.tile];
+    setPlayerRack(newRack);
+
+    // Remove from placedTiles tracking
+    setPlacedTiles(placedTiles.filter(placed => !(placed.row === row && placed.col === col)));
+    
+    console.log(`Removed tile ${placedTileInfo.tile.letter} from (${row}, ${col}) back to rack`);
   };
 
   const placeTile = (row, col, tile) => {
@@ -319,16 +366,81 @@ const Game = () => {
     setDraggedTile({ ...tile, rackIndex: index });
   };
 
+  // FIXED: Enhanced drag start for board tiles
+  const handleBoardTileDragStart = (e, row, col) => {
+    if (!isCurrentPlayerTurn()) {
+      e.preventDefault();
+      return;
+    }
+    
+    // Only allow dragging tiles placed this turn
+    if (!isTileMoveable(row, col)) {
+      e.preventDefault();
+      return;
+    }
+    
+    const tile = board[row][col];
+    const placedTileInfo = placedTiles.find(placed => placed.row === row && placed.col === col);
+    
+    if (tile && placedTileInfo) {
+      setDraggedTile({ 
+        ...tile, 
+        fromBoard: true, 
+        originalRow: row, 
+        originalCol: col,
+        originalTileInfo: placedTileInfo
+      });
+    }
+  };
+
   const handleDragOver = (e) => {
     e.preventDefault();
   };
 
+  // FIXED: Enhanced drop handler for moving tiles
   const handleDrop = (e, row, col) => {
     e.preventDefault();
-    if (draggedTile && !board[row][col]) {
-      placeTile(row, col, draggedTile);
+    if (!draggedTile) return;
+
+    // Can't drop on occupied cell (except moving to same position)
+    if (board[row][col] && !(draggedTile.fromBoard && draggedTile.originalRow === row && draggedTile.originalCol === col)) {
       setDraggedTile(null);
+      return;
     }
+
+    if (draggedTile.fromBoard) {
+      // Moving tile from board to board
+      const { originalRow, originalCol, originalTileInfo } = draggedTile;
+      
+      // If dropping on same position, do nothing
+      if (originalRow === row && originalCol === col) {
+        setDraggedTile(null);
+        return;
+      }
+      
+      // Remove from original position
+      const newBoard = board.map(boardRow => [...boardRow]);
+      newBoard[originalRow][originalCol] = null;
+      newBoard[row][col] = draggedTile;
+      setBoard(newBoard);
+      
+      // Update placed tiles tracking
+      const newPlacedTiles = placedTiles.map(placed => {
+        if (placed.row === originalRow && placed.col === originalCol) {
+          return { ...placed, row, col };
+        }
+        return placed;
+      });
+      setPlacedTiles(newPlacedTiles);
+      
+    } else {
+      // Moving tile from rack to board
+      if (!board[row][col]) {
+        placeTile(row, col, draggedTile);
+      }
+    }
+    
+    setDraggedTile(null);
   };
 
   const recallTiles = () => {
@@ -484,17 +596,23 @@ const Game = () => {
           row.map((cell, colIndex) => {
             const premiumType = getPremiumType(rowIndex, colIndex);
             const isCenter = rowIndex === 7 && colIndex === 7;
+            const isMoveable = cell && isTileMoveable(rowIndex, colIndex);
             
             return (
               <div
                 key={`${rowIndex}-${colIndex}`}
-                className={`board-cell ${premiumType ? `premium-${premiumType.toLowerCase()}` : ''} ${isCenter ? 'center-star' : ''} ${isCurrentPlayerTurn() ? 'clickable' : ''}`}
+                className={`board-cell ${premiumType ? `premium-${premiumType.toLowerCase()}` : ''} ${isCenter ? 'center-star' : ''} ${isCurrentPlayerTurn() ? 'clickable' : ''} ${isMoveable ? 'moveable-tile' : ''}`}
                 onClick={() => handleCellClick(rowIndex, colIndex)}
                 onDragOver={handleDragOver}
                 onDrop={(e) => handleDrop(e, rowIndex, colIndex)}
               >
                 {cell ? (
-                  <div className="placed-tile">
+                  <div 
+                    className={`placed-tile ${isMoveable ? 'current-turn-tile' : 'permanent-tile'}`}
+                    draggable={isCurrentPlayerTurn() && isMoveable}
+                    onDragStart={(e) => handleBoardTileDragStart(e, rowIndex, colIndex)}
+                    title={isMoveable ? 'Click or drag to move this tile' : 'Permanent tile'}
+                  >
                     <span className="tile-letter">{cell.letter}</span>
                     <span className="tile-value">{cell.value}</span>
                   </div>

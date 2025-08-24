@@ -525,6 +525,30 @@ function finalizeScore(gameState: GameState): Record<string, number> {
 // --------------------
 // Add this to your game.ts file - uncomment and fix the startGame handler
 export function registerGameHandlers(io: Server, socket: Socket) {
+  // FIXED: Add broadcast function to sync board state to all players
+  const broadcastGameState = (roomCode: string, excludeSocketId?: string) => {
+    const gameState = gameStates.get(roomCode);
+    if (!gameState) return;
+
+    gameState.players.forEach(player => {
+      if (excludeSocketId && player.socketId === excludeSocketId) return;
+      
+      const playerSocket = io.sockets.sockets.get(player.socketId);
+      if (playerSocket) {
+        playerSocket.emit('gameState', {
+          board: gameState.board,
+          scores: gameState.scores,
+          currentTurn: gameState.currentTurn,
+          players: gameState.players,
+          playerRacks: { [player.id]: gameState.playerRacks[player.id] || [] },
+          gameEnded: gameState.gameEnded,
+          wordsPlayed: gameState.wordsPlayed,
+          firstWordPlayed: gameState.firstWordPlayed
+        });
+      }
+    });
+  };
+
   // Add the updateSocketId handler to handle socket ID changes
   socket.on('updateSocketId', (data: { roomCode: string; oldSocketId?: string; newSocketId: string; playerId: string }) => {
     const { roomCode, oldSocketId, newSocketId, playerId } = data;
@@ -560,11 +584,15 @@ export function registerGameHandlers(io: Server, socket: Socket) {
     // Join the socket room
     socket.join(roomCode);
     
+    // FIXED: Broadcast game state to all players after socket update
+    console.log('Socket ID updated successfully, broadcasting game state to all players');
+    broadcastGameState(roomCode);
+    
     socket.emit('socketUpdated', { roomCode });
     console.log(`Socket ID updated successfully for player ${playerId}`);
   });
 
-  // Fix the startGame handler (uncomment and update)
+  // FIXED: Update startGame handler to ensure all players get the board state
   socket.on('startGame', () => {
     // Find which room this socket belongs to
     const roomCode = Array.from(socket.rooms).find(room => room !== socket.id);
@@ -589,29 +617,37 @@ export function registerGameHandlers(io: Server, socket: Socket) {
     room.gameStarted = true;
     const gameState = initializeGameState(roomCode, room.players);
     
-    console.log('Game started, initial game state:', {
+    console.log('Game started, broadcasting to all players:', {
       roomCode,
       playersCount: gameState.players.length,
       playerRacksKeys: Object.keys(gameState.playerRacks),
-      tileBagCount: gameState.tileBag.length
+      tileBagCount: gameState.tileBag.length,
+      boardInitialized: !!gameState.board
     });
     
-    // Emit to all players in room
-    io.to(roomCode).emit('gameStarted', {
-      gameState: {
-        board: gameState.board,
-        scores: gameState.scores,
-        currentTurn: gameState.currentTurn,
-        players: gameState.players
-      },
-      playerRacks: gameState.playerRacks,
-      tileBag: gameState.tileBag.length // Don't send actual tiles, just count
+    // Send individual game states to each player with their rack
+    gameState.players.forEach(player => {
+      const playerSocket = io.sockets.sockets.get(player.socketId);
+      if (playerSocket) {
+        playerSocket.emit('gameStarted', {
+          gameState: {
+            board: gameState.board, // Ensure board is sent to all players
+            scores: gameState.scores,
+            currentTurn: gameState.currentTurn,
+            players: gameState.players,
+            firstWordPlayed: gameState.firstWordPlayed
+          },
+          playerRacks: { [player.id]: gameState.playerRacks[player.id] },
+          tileBag: gameState.tileBag.length // Don't send actual tiles, just count
+        });
+        console.log(`Sent game start data to player ${player.username}`);
+      }
     });
     
-    console.log(`Game started in room ${roomCode}`);
+    console.log(`Game started in room ${roomCode} with ${gameState.players.length} players`);
   });
 
-  // Update the getGameState handler to be more robust
+  // FIXED: Update the getGameState handler to send complete game state
   socket.on('getGameState', (data: { roomCode: string }) => {
     const { roomCode } = data;
     const gameState = gameStates.get(roomCode);
@@ -630,25 +666,29 @@ export function registerGameHandlers(io: Server, socket: Socket) {
       return;
     }
     
-    console.log(`Sending game state to player ${currentPlayer.username}:`, {
+    console.log(`Sending complete game state to player ${currentPlayer.username}:`, {
       hasBoard: !!gameState.board,
+      boardHasTiles: gameState.board.some(row => row.some(cell => cell !== null)),
       scoresCount: Object.keys(gameState.scores).length,
       currentTurn: gameState.currentTurn,
       playersCount: gameState.players.length,
       playerRackSize: gameState.playerRacks[currentPlayer.id]?.length || 0
     });
     
+    // Send complete game state to the requesting player
     socket.emit('gameState', {
-      board: gameState.board,
+      board: gameState.board, // Always send the complete board
       scores: gameState.scores,
       currentTurn: gameState.currentTurn,
       players: gameState.players,
       playerRacks: { [currentPlayer.id]: gameState.playerRacks[currentPlayer.id] || [] },
       gameEnded: gameState.gameEnded,
-      wordsPlayed: gameState.wordsPlayed
+      wordsPlayed: gameState.wordsPlayed,
+      firstWordPlayed: gameState.firstWordPlayed
     });
+  });
 
-   socket.on('submitMove', async (data: { 
+  socket.on('submitMove', async (data: { 
     roomCode: string; 
     placedTiles: PlacedTile[]; 
     board: (Tile | null)[][]; 
@@ -877,8 +917,7 @@ export function registerGameHandlers(io: Server, socket: Socket) {
     console.log(`${currentPlayer.username} exchanged ${tilesToExchange.length} tiles in room ${roomCode}`);
   });
 
-   
-socket.on('disconnect', () => {
+  socket.on('disconnect', () => {
     // Handle player disconnection during game
     const roomCode = Array.from(socket.rooms).find(room => room !== socket.id);
     
@@ -896,4 +935,4 @@ socket.on('disconnect', () => {
       }
     }
   });
-})}
+}
